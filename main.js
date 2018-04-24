@@ -22,6 +22,9 @@ field_width = 20;
 inner_field_width = field_width - 2;
 field_height = 30;
 
+const replica_color = "#2ECC71";
+const client_color = "#F7DC6F";
+
 $(document).ready(function() {
     const input = $('body');
     const canvas = document.getElementById("canvas");
@@ -32,10 +35,12 @@ $(document).ready(function() {
     // arrange replicas in a circle
     const circleRadius = 200;
     const replicas = Immutable.Range(0, replicaSize).map(i => {
-      var x = 250 + circleRadius * Math.cos(- Math.PI / 2 + 2 * Math.PI * i / replicaSize);
-      var y = 250 + circleRadius * Math.sin(- Math.PI / 2 + 2 * Math.PI * i / replicaSize);
-      return new Replica(i, x, y);
+      var x = 270 + circleRadius * Math.cos(- Math.PI / 2 + 2 * Math.PI * i / replicaSize);
+      var y = 300 + circleRadius * Math.sin(- Math.PI / 2 + 2 * Math.PI * i / replicaSize);
+      return new Replica("r" + i, x, y);
     }).toList();
+
+    const clients = Immutable.List.of(new Client("c0", 270, 540));
 
     // construct links between replica pairs
     const links = Immutable.Range(0, replicaSize).flatMap(src_idx => {
@@ -45,21 +50,66 @@ $(document).ready(function() {
           const src_replica = replicas.get(src_idx);
           const dest_replica = replicas.get(dest_idx);
           const link = new Link(src_replica, dest_replica);
-          src_replica.addLink(dest_idx, link);
+          src_replica.addLink(dest_replica.name, link);
           return link;
         }
       }).filter(link => link != null);
-    }).toList();
+    })
+    .concat(Immutable.Range(0, replicaSize).flatMap(replica_idx => {
+      return Immutable.Range(0, clients.size).flatMap(client_idx => {
+          const replica = replicas.get(replica_idx);
+          const client = clients.get(client_idx);
+
+          const link1 = new Link(client, replica);
+          client.addLink(replica.name, link1);
+
+          const link2 = new Link(replica, client);
+          replica.addLink(client.name, link2);
+          
+          return Immutable.List([link1, link2]);
+      });
+    }))
+    .toList();
+
+    console.log(links.size);
     
     // start draw loop
     setInterval(() => {
       ctx.save();
       ctx.fillStyle = "#EAECEE";
-      ctx.fillRect(0, 0, 600, 600);
+      ctx.fillRect(0, 0, 600, 650);
+
+      ctx.fillStyle = "black";
+      ctx.font = "Bold 30px Arial";
+      ctx.fillText("PAXOS", 220, 50);
+      
+      ctx.font = "Bold 18px Arial";
+      ctx.fillText("Legend", 20, 40);
+      
+      ctx.font = "12px Arial";
+      ctx.fillText("Replica ", 45, 65);
+      
+      ctx.fillStyle = replica_color;
+      ctx.beginPath();
+      ctx.arc(30, 60, 8, Math.PI * 2, false);
+      ctx.fill();
+      ctx.stroke();
+      
+      ctx.fillStyle = "black";
+      ctx.font = "12px Arial";
+      ctx.fillText("Client ", 45, 85);
+      
+      ctx.fillStyle = client_color;
+      ctx.beginPath();
+      ctx.arc(30, 80, 8, Math.PI * 2, false);
+      ctx.fill();
+      ctx.stroke();
+
       ctx.restore();
 
       links.forEach(link => link.draw(ctx));
       replicas.forEach(replica => replica.draw(ctx));
+      clients.forEach(client => client.draw(ctx));
     }, 100);
 });
 
@@ -99,7 +149,6 @@ class Link {
     ctx.stroke();
 
     this.deliverables.forEach(d => {
-      console.log("here")
       ctx.beginPath();
       ctx.arc(
         this.src.x + d.progress * (this.dest.x - this.src.x),
@@ -117,7 +166,7 @@ class Link {
 
     this.deliverables = still;
     done.forEach(d => {
-      this.dest.queue = this.dest.queue.push(d.packet);
+      this.dest.receivePacket(d.packet);
     });
   }
 
@@ -127,7 +176,7 @@ class Link {
   }
 }
 
-class Replica {
+class Node {
   constructor(name, x, y) {
     // visual properties
     this.name = name;
@@ -136,7 +185,6 @@ class Replica {
 
     // state properties
     this.counter = 0;
-    this.color = "yellow";
     this.links = Immutable.Map();
     this.queue = Immutable.List();
 
@@ -145,45 +193,93 @@ class Replica {
   }
 
   addLink(replica_idx, link) {
-    this.links[replica_idx] = link;
+    this.links = this.links.set(replica_idx, link);
   }
 
   sendPacket(address, data) {
-    this.links[address].deliver(new Packet(data));
+    this.links.get(address).deliver(new Packet(data));
+  }
+
+  receivePacket(packet) {
+    this.queue = this.queue.push(packet);
+  }
+
+  consumeMessage() {
+    const element = this.queue.first();
+    this.queue = this.queue.shift();
+    return element;
   }
 
   draw(ctx) {
     ctx.save();
     ctx.fillStyle = this.color;
     ctx.beginPath();
-    ctx.arc(this.x, this.y, 10, 0, Math.PI * 2, false);
+    ctx.arc(this.x, this.y, 14, 0, Math.PI * 2, false);
     ctx.fill();
+    ctx.stroke();
 
-    var queueIndex = 20;
-    this.queue.forEach(p => {
+    const drawMessageQueueEntry = (index, font, text) => {
       ctx.save();
-      ctx.fillStyle = "blue";
-      ctx.fillText(p.data, this.x, this.y + queueIndex);
-      queueIndex += 10;
+      ctx.fillStyle = "#CCD1D1";
+      const spacing = 14;
+      const y = 30 + this.y + spacing * index;
+      ctx.fillRect(this.x, y - 10, 70, spacing);
+      ctx.strokeRect(this.x, y - 10, 70, spacing);
+      ctx.font = font;
+      ctx.fillStyle = "black";
+      ctx.fillText(text, this.x + 2, y);
       ctx.restore();
+    }
+
+    drawMessageQueueEntry(0, "Bold 10px Arial", "Messages");
+    var queueIndex = 1;
+    this.queue.forEach(p => {
+      drawMessageQueueEntry(queueIndex, "10px Arial", p.data);
+      queueIndex++;
     });
 
+    ctx.font = "12px Arial";
     ctx.fillStyle = "black";
-    ctx.fillText(this.name, this.x - 4, this.y + 3);
+    ctx.fillText(this.name, this.x - 6, this.y + 4);
 
     ctx.restore();
   }
 
   execute() {
-    if (this.counter % 10 == 0) {
-      if (this.color === "yellow") this.color = "red";
-      else this.color = "yellow";
-    }
-
-    if (this.name == 0 && this.counter % 20 == 0) {
-      this.sendPacket(1, "ahmed");
-    }
-
     this.counter++;
+  }
+}
+
+class Replica extends Node {
+  constructor(name, x, y) {
+    super(name, x, y);
+    this.color = replica_color;
+  }
+
+  execute() {
+    super.execute();
+
+    if (this.name == "r0" && this.counter % 20 == 1) {
+      this.sendPacket("r1", "data");
+    }
+
+    if (this.counter % 20 == 4) { 
+      this.consumeMessage();
+    }
+  }
+}
+
+class Client extends Node {
+  constructor(name, x, y) {
+    super(name, x, y);
+    this.color = client_color;
+  }
+
+  execute() {
+    super.execute();
+
+    if (this.counter % 20 == 3) {
+      this.sendPacket("r0", "ANSWER");
+    }
   }
 }
