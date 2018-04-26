@@ -254,6 +254,47 @@ class Replica extends Node {
   constructor(name, x, y) {
     super(name, x, y);
     this.color = replica_color;
+    
+    if(name == "r0")this.isMaster = true;
+    else this.isMaster = false;
+  }
+
+  draw(ctx) {
+    ctx.save();
+    
+    if(this.isMaster)ctx.fillStyle = "#3498DB";
+    else ctx.fillStyle = this.color;
+
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, 14, 0, Math.PI * 2, false);
+    ctx.fill();
+    ctx.stroke();
+
+    const drawMessageQueueEntry = (index, font, text) => {
+      ctx.save();
+      ctx.fillStyle = "#CCD1D1";
+      const spacing = 14;
+      const y = 30 + this.y + spacing * index;
+      ctx.fillRect(this.x, y - 10, 70, spacing);
+      ctx.strokeRect(this.x, y - 10, 70, spacing);
+      ctx.font = font;
+      ctx.fillStyle = "black";
+      ctx.fillText(text, this.x + 2, y);
+      ctx.restore();
+    }
+
+    drawMessageQueueEntry(0, "Bold 10px Arial", "Messages");
+    var queueIndex = 1;
+    this.queue.forEach(p => {
+      drawMessageQueueEntry(queueIndex, "10px Arial", p.data);
+      queueIndex++;
+    });
+
+    ctx.font = "12px Arial";
+    ctx.fillStyle = "black";
+    ctx.fillText(this.name, this.x - 6, this.y + 4);
+
+    ctx.restore();
   }
 
   execute() {
