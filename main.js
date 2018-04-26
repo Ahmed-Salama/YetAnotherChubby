@@ -82,6 +82,7 @@ $(document).ready(function() {
       ctx.fillStyle = "black";
       ctx.font = "Bold 30px Arial";
       ctx.fillText("PAXOS", 220, 50);
+      ctx.fillText("YOUSEF", 350, 50);
       
       ctx.font = "Bold 18px Arial";
       ctx.fillText("Legend", 20, 40);
