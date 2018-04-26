@@ -82,7 +82,6 @@ $(document).ready(function() {
       ctx.fillStyle = "black";
       ctx.font = "Bold 30px Arial";
       ctx.fillText("PAXOS", 220, 50);
-      ctx.fillText("YOUSEF", 350, 50);
       
       ctx.font = "Bold 18px Arial";
       ctx.fillText("Legend", 20, 40);
@@ -301,13 +300,24 @@ class Replica extends Node {
   execute() {
     super.execute();
 
-    if (this.name == "r0" && this.counter % 20 == 1) {
+    if(this.counter % 20 == 4){
+      if(this.queue.length > 0){
+        if(this.isMaster){
+          this.sendPacket("c0", "value");
+        }else{
+          this.sendPacket("r0", "key");
+        }
+        this.queue = this.queue.shift();
+      }
+    }
+
+    /*if (this.name == "r0" && this.counter % 20 == 1) {
       this.sendPacket("r1", "data");
     }
 
     if (this.counter % 20 == 4) { 
       this.consumeMessage();
-    }
+    }*/
   }
 }
 
@@ -320,8 +330,11 @@ class Client extends Node {
   execute() {
     super.execute();
 
-    if (this.counter % 20 == 3) {
-      this.sendPacket("r0", "ANSWER");
+    if (this.counter % 40 == 3) {
+      this.sendPacket("r" + Math.floor(Math.random() * this.links.length), "key");
+    }
+    if(this.counter % 40 == 10) {
+      this.consumeMessage();
     }
   }
 }
