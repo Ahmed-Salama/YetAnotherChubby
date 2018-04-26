@@ -105,6 +105,16 @@ $(document).ready(function() {
       ctx.fill();
       ctx.stroke();
 
+      ctx.fillStyle = "black";
+      ctx.font = "12px Arial";
+      ctx.fillText("Master ", 45, 105);
+      
+      ctx.fillStyle = "#3498DB";
+      ctx.beginPath();
+      ctx.arc(30, 100, 8, Math.PI * 2, false);
+      ctx.fill();
+      ctx.stroke();
+
       ctx.restore();
 
       links.forEach(link => link.draw(ctx));
