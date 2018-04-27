@@ -264,9 +264,11 @@ class Replica extends Node {
   constructor(name, x, y) {
     super(name, x, y);
     this.color = replica_color;
-    
+
     if(name == "r0")this.isMaster = true;
     else this.isMaster = false;
+
+    this.consensus_value = -1;
   }
 
   draw(ctx) {
@@ -299,6 +301,14 @@ class Replica extends Node {
       drawMessageQueueEntry(queueIndex, "10px Arial", p.data);
       queueIndex++;
     });
+
+    ctx.fillStyle = "#80FFEB";
+    ctx.fillRect(this.x + 5, this.y - 32, 40, 15);
+    ctx.strokeRect(this.x + 5, this.y - 32, 40, 15);
+    ctx.font = "12px Arial";
+    ctx.fillStyle = "black";
+    ctx.fillText(this.consensus_value, this.x + 8, this.y - 20);
+    ctx.restore();
 
     ctx.font = "12px Arial";
     ctx.fillStyle = "black";
