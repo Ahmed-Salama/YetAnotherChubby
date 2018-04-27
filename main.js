@@ -124,8 +124,9 @@ $(document).ready(function() {
 });
 
 class Packet {
-  constructor(data) {
+  constructor(data, type) {
     this.data = data;
+    this.type = type;
   }  
 }
 
@@ -206,8 +207,8 @@ class Node {
     this.links = this.links.set(replica_idx, link);
   }
 
-  sendPacket(address, data) {
-    this.links.get(address).deliver(new Packet(data));
+  sendPacket(address, data, type) {
+    this.links.get(address).deliver(new Packet(data, type));
   }
 
   receivePacket(packet) {
@@ -244,7 +245,7 @@ class Node {
     drawMessageQueueEntry(0, "Bold 10px Arial", "Messages");
     var queueIndex = 1;
     this.queue.forEach(p => {
-      drawMessageQueueEntry(queueIndex, "10px Arial", p.data);
+      drawMessageQueueEntry(queueIndex, "10px Arial", p.type + ": " + p.data);
       queueIndex++;
     });
 
@@ -298,7 +299,7 @@ class Replica extends Node {
     drawMessageQueueEntry(0, "Bold 10px Arial", "Messages");
     var queueIndex = 1;
     this.queue.forEach(p => {
-      drawMessageQueueEntry(queueIndex, "10px Arial", p.data);
+      drawMessageQueueEntry(queueIndex, "10px Arial", p.type + ": " + p.data);
       queueIndex++;
     });
 
@@ -322,10 +323,18 @@ class Replica extends Node {
 
     if(this.counter % 20 == 4){
       if(this.queue.length > 0){
+        const data = this.queue.first().data;
+        const type = this.queue.first().type;
+
         if(this.isMaster){
-          this.sendPacket("c0", "value");
+          if(type == "read"){
+            this.sendPacket("c0", this.consensus_value, "reply");
+          }else if(type == "write"){
+            this.consensus_value = data;
+            this.sendPacket("c0", "success", "reply ");
+          }
         }else{
-          this.sendPacket("r0", "key");
+          this.sendPacket("r0", data, type);
         }
         this.queue = this.queue.shift();
       }
@@ -351,9 +360,12 @@ class Client extends Node {
     super.execute();
 
     if (this.counter % 40 == 3) {
-      this.sendPacket("r" + Math.floor(Math.random() * this.links.length), "key");
+      this.sendPacket("r" + Math.floor(Math.random() * this.links.length), Math.floor(Math.random() * 1000), "write");
     }
-    if(this.counter % 40 == 10) {
+    if(this.counter % 40 == 20){
+      this.sendPacket("r" + Math.floor(Math.random() * this.links.length), -1, "read");
+    }
+    if(this.counter % 20 == 10) {
       this.consumeMessage();
     }
   }
