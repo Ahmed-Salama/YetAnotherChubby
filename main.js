@@ -211,6 +211,10 @@ class Node {
     this.links.get(address).deliver(new Packet(data, type));
   }
 
+  sendPacket2(address, packet) {
+    this.links.get(address).deliver(packet);
+  }
+
   receivePacket(packet) {
     this.queue = this.queue.push(packet);
   }
@@ -334,7 +338,7 @@ class Replica extends Node {
             this.sendPacket("c0", "success", "reply");
           }
         }else{
-          this.sendPacket("r0", data, type);
+          this.sendPacket("c0", "r0", "redirect");
         }
         this.queue = this.queue.shift();
       }
@@ -347,6 +351,7 @@ class Client extends Node {
     super(name, x, y);
     this.color = client_color;
     this.state = "idle";
+    this.current_request = -1;
   }
 
   execute() {
@@ -356,10 +361,11 @@ class Client extends Node {
       if(this.state == "idle"){
         var rnd = Math.floor(Math.random() * 2);
         if(rnd == 0){
-          this.sendPacket("r" + Math.floor(Math.random() * this.links.length), Math.floor(Math.random() * 1000), "write");
+          this.current_request = new Packet(Math.floor(Math.random() * 1000), "write");
         }else{
-          this.sendPacket("r" + Math.floor(Math.random() * this.links.length), -1, "read");
+          this.current_request = new Packet(-1, "read");
         }
+        this.sendPacket2("r" + Math.floor(Math.random() * this.links.length), this.current_request);
         this.state = "waiting";
       }
     }
@@ -368,7 +374,13 @@ class Client extends Node {
         const data = this.queue.first().data;
         const type = this.queue.first().type;
 
-        if(type == "reply")this.state = "idle";
+        if(type == "reply"){
+          this.current_request = -1;
+          this.state = "idle";
+        }else if(type == "redirect"){
+          this.sendPacket2(data, this.current_request);
+        }
+
         this.queue = this.queue.shift();
       }
     }
