@@ -331,7 +331,7 @@ class Replica extends Node {
             this.sendPacket("c0", this.consensus_value, "reply");
           }else if(type == "write"){
             this.consensus_value = data;
-            this.sendPacket("c0", "success", "reply ");
+            this.sendPacket("c0", "success", "reply");
           }
         }else{
           this.sendPacket("r0", data, type);
@@ -339,14 +339,6 @@ class Replica extends Node {
         this.queue = this.queue.shift();
       }
     }
-
-    /*if (this.name == "r0" && this.counter % 20 == 1) {
-      this.sendPacket("r1", "data");
-    }
-
-    if (this.counter % 20 == 4) { 
-      this.consumeMessage();
-    }*/
   }
 }
 
@@ -354,19 +346,31 @@ class Client extends Node {
   constructor(name, x, y) {
     super(name, x, y);
     this.color = client_color;
+    this.state = "idle";
   }
 
   execute() {
     super.execute();
 
     if (this.counter % 40 == 3) {
-      this.sendPacket("r" + Math.floor(Math.random() * this.links.length), Math.floor(Math.random() * 1000), "write");
-    }
-    if(this.counter % 40 == 20){
-      this.sendPacket("r" + Math.floor(Math.random() * this.links.length), -1, "read");
+      if(this.state == "idle"){
+        var rnd = Math.floor(Math.random() * 2);
+        if(rnd == 0){
+          this.sendPacket("r" + Math.floor(Math.random() * this.links.length), Math.floor(Math.random() * 1000), "write");
+        }else{
+          this.sendPacket("r" + Math.floor(Math.random() * this.links.length), -1, "read");
+        }
+        this.state = "waiting";
+      }
     }
     if(this.counter % 20 == 10) {
-      this.consumeMessage();
+      if(this.queue.length > 0){
+        const data = this.queue.first().data;
+        const type = this.queue.first().type;
+
+        if(type == "reply")this.state = "idle";
+        this.queue = this.queue.shift();
+      }
     }
   }
 }
