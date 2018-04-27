@@ -34,7 +34,7 @@ $(document).ready(function() {
 
     // arrange replicas in a circle
     const circleRadius = 200;
-    const replicas = Immutable.Range(0, replicaSize).map(i => {
+    replicas = Immutable.Range(0, replicaSize).map(i => {
       var x = 270 + circleRadius * Math.cos(- Math.PI / 2 + 2 * Math.PI * i / replicaSize);
       var y = 300 + circleRadius * Math.sin(- Math.PI / 2 + 2 * Math.PI * i / replicaSize);
       return new Replica("r" + i, x, y);
@@ -198,9 +198,10 @@ class Node {
     this.counter = 0;
     this.links = Immutable.Map();
     this.queue = Immutable.List();
+    this.status = "alive";
 
     // set infinite loop for the replica 
-    setInterval(this.execute.bind(this), 100);
+    this.timerId = setInterval(this.execute.bind(this), 100);
   }
 
   addLink(replica_idx, link) {
@@ -216,13 +217,23 @@ class Node {
   }
 
   receivePacket(packet) {
-    this.queue = this.queue.push(packet);
+    if(this.status == "alive")this.queue = this.queue.push(packet);
   }
 
   consumeMessage() {
     const element = this.queue.first();
     this.queue = this.queue.shift();
     return element;
+  }
+
+  kill(){
+    clearTimeout(this.timerId);
+    this.queue = this.queue.clear();
+    this.status = "dead";
+  }
+  revive(){
+    this.timerId = setInterval(this.execute.bind(this), 100);
+    this.status = "alive";
   }
 
   draw(ctx) {
@@ -232,6 +243,23 @@ class Node {
     ctx.arc(this.x, this.y, 14, 0, Math.PI * 2, false);
     ctx.fill();
     ctx.stroke();
+
+    if(this.status == "dead"){
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = "#C30000";
+
+      ctx.beginPath();
+      ctx.moveTo(this.x + 12, this.y + 12);
+      ctx.lineTo(this.x - 12, this.y - 12);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(this.x - 12, this.y + 12);
+      ctx.lineTo(this.x + 12, this.y - 12);
+      ctx.stroke();
+
+      ctx.restore();
+    }
 
     const drawMessageQueueEntry = (index, font, text) => {
       ctx.save();
@@ -274,6 +302,8 @@ class Replica extends Node {
     else this.isMaster = false;
 
     this.consensus_value = -1;
+    
+    this.kill_time = Math.floor(Math.random() * 200);
   }
 
   draw(ctx) {
@@ -286,6 +316,23 @@ class Replica extends Node {
     ctx.arc(this.x, this.y, 14, 0, Math.PI * 2, false);
     ctx.fill();
     ctx.stroke();
+
+    if(this.status == "dead"){
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = "#C30000";
+
+      ctx.beginPath();
+      ctx.moveTo(this.x + 12, this.y + 12);
+      ctx.lineTo(this.x - 12, this.y - 12);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(this.x - 12, this.y + 12);
+      ctx.lineTo(this.x + 12, this.y - 12);
+      ctx.stroke();
+
+      ctx.restore();
+    }
 
     const drawMessageQueueEntry = (index, font, text) => {
       ctx.save();
@@ -324,6 +371,10 @@ class Replica extends Node {
 
   execute() {
     super.execute();
+
+    if(this.counter >= this.kill_time){
+      this.kill();
+    }
 
     if(this.counter % 20 == 4){
       if(this.queue.length > 0){
