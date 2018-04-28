@@ -22,12 +22,38 @@ field_width = 20;
 inner_field_width = field_width - 2;
 field_height = 30;
 
-const replica_color = "#2ECC71";
-const client_color = "#F7DC6F";
+const replica_health_trigger = 7;
+
+const replica_color = "#F7DC6F";
+const master_color = "#EB984E";
+const client_color = "#C39BD3";
+
+//Function to get the mouse position
+const getMousePos = (canvas, event) => {
+  var rect = canvas.getBoundingClientRect();
+  return {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top
+  };
+}
+
+mouse_position = {
+  x: 0,
+  y: 0
+};
+mouse_released = false;
 
 $(document).ready(function() {
     const input = $('body');
     const canvas = document.getElementById("canvas");
+
+    canvas.addEventListener('mousemove', function(e) {
+      mouse_position = getMousePos(canvas, e);
+    });
+
+    canvas.addEventListener('mouseup', function(e) {
+      mouse_released = true;
+    });
   
     const ctx = canvas.getContext("2d");
     const replicaSize = 5;
@@ -109,7 +135,7 @@ $(document).ready(function() {
       ctx.font = "12px Arial";
       ctx.fillText("Master ", 45, 105);
       
-      ctx.fillStyle = "#3498DB";
+      ctx.fillStyle = master_color;
       ctx.beginPath();
       ctx.arc(30, 100, 8, Math.PI * 2, false);
       ctx.fill();
@@ -120,6 +146,8 @@ $(document).ready(function() {
       links.forEach(link => link.draw(ctx));
       replicas.forEach(replica => replica.draw(ctx));
       clients.forEach(client => client.draw(ctx));
+
+      mouse_released = false;
     }, 100);
 });
 
@@ -278,13 +306,22 @@ class Node {
   }
 
   kill(){
-    clearTimeout(this.timerId);
     this.queue = this.queue.clear();
     this.status = "dead";
   }
+
   revive(){
-    this.timerId = setInterval(this.execute.bind(this), 100);
     this.status = "alive";
+  }
+
+  isMouseOver() {
+    return (this.x - mouse_position.x) * (this.x - mouse_position.x) +
+           (this.y - mouse_position.y) * (this.y - mouse_position.y) <= 14 * 14;
+  }
+
+  isMouseOverHealthTrigger() {
+    return (this.x + replica_health_trigger - mouse_position.x) * (this.x + replica_health_trigger - mouse_position.x) +
+           (this.y - replica_health_trigger - mouse_position.y) * (this.y - replica_health_trigger - mouse_position.y) <= 4 * 4;
   }
 
   execute() {
@@ -301,14 +338,12 @@ class Replica extends Node {
     else this.isMaster = false;
 
     this.consensus_value = -1;
-    
-    this.kill_time = Math.floor(Math.random() * 200);
   }
 
   draw(ctx) {
     ctx.save();
 
-    if(this.isMaster)ctx.fillStyle = "#3498DB";
+    if(this.isMaster)ctx.fillStyle = master_color;
     else ctx.fillStyle = this.color;
 
     ctx.beginPath();
@@ -320,7 +355,7 @@ class Replica extends Node {
     this.drawIfKilled(ctx);
     this.drawMessageQueue(ctx);
 
-    ctx.fillStyle = "#80FFEB";
+    ctx.fillStyle = "#ABEBC6";
     ctx.fillRect(this.x + 5, this.y - 32, 40, 15);
     ctx.strokeRect(this.x + 5, this.y - 32, 40, 15);
     ctx.font = "12px Arial";
@@ -330,32 +365,51 @@ class Replica extends Node {
 
     this.drawName(ctx);
 
+    // mouse logic
+    if (this.isMouseOver()) {
+      ctx.save();
+      ctx.fillStyle = this.status == "alive" ? "#E74C3C" : "#2ECC71";
+      ctx.beginPath();
+      ctx.arc(this.x + replica_health_trigger, this.y - replica_health_trigger, 4, 0, Math.PI * 2, false);
+      ctx.fill();
+      ctx.restore();
+    }
+
     ctx.restore();
   }
 
   execute() {
-    super.execute();
-
-    if(this.counter >= this.kill_time){
-      this.kill();
+    if (this.status == "alive") {
+      super.execute();
+  
+      if(this.counter % 20 == 4){
+        if(this.queue.size > 0){
+          const data = this.queue.first().data;
+          const type = this.queue.first().type;
+  
+          if(this.isMaster){
+            if(type == "read"){
+              this.sendPacket("c0", this.consensus_value, "reply");
+            }else if(type == "write"){
+              this.consensus_value = data;
+              this.sendPacket("c0", "success", "reply");
+            }
+          }else{
+            this.sendPacket("c0", "r0", "redirect");
+          }
+          this.queue = this.queue.shift();
+        }
+      }
     }
 
-    if(this.counter % 20 == 4){
-      if(this.queue.length > 0){
-        const data = this.queue.first().data;
-        const type = this.queue.first().type;
-
-        if(this.isMaster){
-          if(type == "read"){
-            this.sendPacket("c0", this.consensus_value, "reply");
-          }else if(type == "write"){
-            this.consensus_value = data;
-            this.sendPacket("c0", "success", "reply");
-          }
-        }else{
-          this.sendPacket("c0", "r0", "redirect");
+    // mouse logic
+    if (this.isMouseOver()) {
+      if (this.isMouseOverHealthTrigger() && mouse_released) {
+        if (this.status == "alive") {
+          this.kill();
+        } else {
+          this.revive();
         }
-        this.queue = this.queue.shift();
       }
     }
   }
@@ -397,12 +451,12 @@ class Client extends Node {
         }else{
           this.current_request = new Packet(-1, "read");
         }
-        this.sendPacket2("r" + Math.floor(Math.random() * this.links.length), this.current_request);
+        this.sendPacket2("r" + Math.floor(Math.random() * this.links.size), this.current_request);
         this.state = "waiting";
       }
     }
     if(this.counter % 20 == 10) {
-      if(this.queue.length > 0){
+      if(this.queue.size > 0){
         const data = this.queue.first().data;
         const type = this.queue.first().type;
 
