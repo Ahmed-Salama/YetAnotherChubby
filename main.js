@@ -204,6 +204,57 @@ class Node {
     this.timerId = setInterval(this.execute.bind(this), 100);
   }
 
+  drawIfKilled(ctx) {
+    if (this.status == "dead"){
+      ctx.save();
+
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = "#C30000";
+
+      ctx.beginPath();
+      ctx.moveTo(this.x + 12, this.y + 12);
+      ctx.lineTo(this.x - 12, this.y - 12);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(this.x - 12, this.y + 12);
+      ctx.lineTo(this.x + 12, this.y - 12);
+      ctx.stroke();
+
+      ctx.restore();
+    }
+  }
+
+  drawMessageQueue(ctx) {
+    const drawMessageQueueEntry = (index, font, text) => {
+      ctx.save();
+      ctx.fillStyle = "#CCD1D1";
+      const spacing = 14;
+      const y = 30 + this.y + spacing * index;
+      ctx.fillRect(this.x, y - 10, 70, spacing);
+      ctx.strokeRect(this.x, y - 10, 70, spacing);
+      ctx.font = font;
+      ctx.fillStyle = "black";
+      ctx.fillText(text, this.x + 2, y);
+      ctx.restore();
+    }
+    drawMessageQueueEntry(0, "Bold 10px Arial", "Messages");
+
+    var queueIndex = 1;
+    this.queue.forEach(p => {
+      drawMessageQueueEntry(queueIndex, "10px Arial", p.type + ": " + p.data);
+      queueIndex++;
+    });
+  }
+
+  drawName(ctx) {
+    ctx.save();
+    ctx.font = "12px Arial";
+    ctx.fillStyle = "black";
+    ctx.fillText(this.name, this.x - 6, this.y + 4);
+    ctx.restore();
+  }
+
   addLink(replica_idx, link) {
     this.links = this.links.set(replica_idx, link);
   }
@@ -236,58 +287,6 @@ class Node {
     this.status = "alive";
   }
 
-  draw(ctx) {
-    ctx.save();
-    ctx.fillStyle = this.color;
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, 14, 0, Math.PI * 2, false);
-    ctx.fill();
-    ctx.stroke();
-
-    if(this.status == "dead"){
-      ctx.lineWidth = 4;
-      ctx.strokeStyle = "#C30000";
-
-      ctx.beginPath();
-      ctx.moveTo(this.x + 12, this.y + 12);
-      ctx.lineTo(this.x - 12, this.y - 12);
-      ctx.stroke();
-
-      ctx.beginPath();
-      ctx.moveTo(this.x - 12, this.y + 12);
-      ctx.lineTo(this.x + 12, this.y - 12);
-      ctx.stroke();
-
-      ctx.restore();
-    }
-
-    const drawMessageQueueEntry = (index, font, text) => {
-      ctx.save();
-      ctx.fillStyle = "#CCD1D1";
-      const spacing = 14;
-      const y = 30 + this.y + spacing * index;
-      ctx.fillRect(this.x, y - 10, 70, spacing);
-      ctx.strokeRect(this.x, y - 10, 70, spacing);
-      ctx.font = font;
-      ctx.fillStyle = "black";
-      ctx.fillText(text, this.x + 2, y);
-      ctx.restore();
-    }
-
-    drawMessageQueueEntry(0, "Bold 10px Arial", "Messages");
-    var queueIndex = 1;
-    this.queue.forEach(p => {
-      drawMessageQueueEntry(queueIndex, "10px Arial", p.type + ": " + p.data);
-      queueIndex++;
-    });
-
-    ctx.font = "12px Arial";
-    ctx.fillStyle = "black";
-    ctx.fillText(this.name, this.x - 6, this.y + 4);
-
-    ctx.restore();
-  }
-
   execute() {
     this.counter++;
   }
@@ -316,43 +315,10 @@ class Replica extends Node {
     ctx.arc(this.x, this.y, 14, 0, Math.PI * 2, false);
     ctx.fill();
     ctx.stroke();
+    ctx.restore();
 
-    if(this.status == "dead"){
-      ctx.lineWidth = 4;
-      ctx.strokeStyle = "#C30000";
-
-      ctx.beginPath();
-      ctx.moveTo(this.x + 12, this.y + 12);
-      ctx.lineTo(this.x - 12, this.y - 12);
-      ctx.stroke();
-
-      ctx.beginPath();
-      ctx.moveTo(this.x - 12, this.y + 12);
-      ctx.lineTo(this.x + 12, this.y - 12);
-      ctx.stroke();
-
-      ctx.restore();
-    }
-
-    const drawMessageQueueEntry = (index, font, text) => {
-      ctx.save();
-      ctx.fillStyle = "#CCD1D1";
-      const spacing = 14;
-      const y = 30 + this.y + spacing * index;
-      ctx.fillRect(this.x, y - 10, 70, spacing);
-      ctx.strokeRect(this.x, y - 10, 70, spacing);
-      ctx.font = font;
-      ctx.fillStyle = "black";
-      ctx.fillText(text, this.x + 2, y);
-      ctx.restore();
-    }
-
-    drawMessageQueueEntry(0, "Bold 10px Arial", "Messages");
-    var queueIndex = 1;
-    this.queue.forEach(p => {
-      drawMessageQueueEntry(queueIndex, "10px Arial", p.type + ": " + p.data);
-      queueIndex++;
-    });
+    this.drawIfKilled(ctx);
+    this.drawMessageQueue(ctx);
 
     ctx.fillStyle = "#80FFEB";
     ctx.fillRect(this.x + 5, this.y - 32, 40, 15);
@@ -362,9 +328,7 @@ class Replica extends Node {
     ctx.fillText(this.consensus_value, this.x + 8, this.y - 20);
     ctx.restore();
 
-    ctx.font = "12px Arial";
-    ctx.fillStyle = "black";
-    ctx.fillText(this.name, this.x - 6, this.y + 4);
+    this.drawName(ctx);
 
     ctx.restore();
   }
@@ -403,6 +367,23 @@ class Client extends Node {
     this.color = client_color;
     this.state = "idle";
     this.current_request = -1;
+  }
+
+  draw(ctx) {
+    ctx.save();
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, 14, 0, Math.PI * 2, false);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+
+    this.drawIfKilled(ctx);
+    this.drawMessageQueue(ctx);
+
+    this.drawName(ctx);
+
+    ctx.restore();
   }
 
   execute() {
