@@ -22,7 +22,7 @@ field_width = 20;
 inner_field_width = field_width - 2;
 field_height = 30;
 
-const replica_health_trigger = 7;
+const replica_health_trigger = 10;
 
 const replica_color = "#F7DC6F";
 const master_color = "#EB984E";
@@ -148,7 +148,7 @@ $(document).ready(function() {
       clients.forEach(client => client.draw(ctx));
 
       mouse_released = false;
-    }, 100);
+    }, 40);
 });
 
 class Packet {
@@ -171,7 +171,7 @@ class Link {
     this.src = src;
     this.dest = dest;
     this.deliverables = Immutable.List();
-    this.speed = 0.1;
+    this.speed = 0.04;
 
     // set infinite loop for the link 
     setInterval(this.execute.bind(this), 100);
@@ -316,16 +316,23 @@ class Node {
 
   isMouseOver() {
     return (this.x - mouse_position.x) * (this.x - mouse_position.x) +
-           (this.y - mouse_position.y) * (this.y - mouse_position.y) <= 14 * 14;
+           (this.y - mouse_position.y) * (this.y - mouse_position.y) <= 18 * 18;
   }
 
   isMouseOverHealthTrigger() {
     return (this.x + replica_health_trigger - mouse_position.x) * (this.x + replica_health_trigger - mouse_position.x) +
-           (this.y - replica_health_trigger - mouse_position.y) * (this.y - replica_health_trigger - mouse_position.y) <= 4 * 4;
+           (this.y - replica_health_trigger - mouse_position.y) * (this.y - replica_health_trigger - mouse_position.y) <= 10 * 10;
   }
 
   execute() {
     this.counter++;
+
+    if (this.status == "alive") {
+      this.executeIfAlive();
+    }
+  }
+
+  executeIfAlive() {
   }
 }
 
@@ -378,38 +385,38 @@ class Replica extends Node {
     ctx.restore();
   }
 
-  execute() {
-    if (this.status == "alive") {
-      super.execute();
+  executeIfAlive() {
+    super.executeIfAlive();
   
-      if(this.counter % 20 == 4){
-        if(this.queue.size > 0){
-          const data = this.queue.first().data;
-          const type = this.queue.first().type;
-  
-          if(this.isMaster){
-            if(type == "read"){
-              this.sendPacket("c0", this.consensus_value, "reply");
-            }else if(type == "write"){
-              this.consensus_value = data;
-              this.sendPacket("c0", "success", "reply");
-            }
-          }else{
-            this.sendPacket("c0", "r0", "redirect");
+    if(this.counter % 20 == 4){
+      if(this.queue.size > 0){
+        const data = this.queue.first().data;
+        const type = this.queue.first().type;
+
+        if(this.isMaster){
+          if(type == "read"){
+            this.sendPacket("c0", this.consensus_value, "reply");
+          }else if(type == "write"){
+            this.consensus_value = data;
+            this.sendPacket("c0", "success", "reply");
           }
-          this.queue = this.queue.shift();
+        }else{
+          this.sendPacket("c0", "r0", "redirect");
         }
+        this.queue = this.queue.shift();
       }
     }
+  }
+
+  execute() {
+    super.execute();
 
     // mouse logic
-    if (this.isMouseOver()) {
-      if (this.isMouseOverHealthTrigger() && mouse_released) {
-        if (this.status == "alive") {
-          this.kill();
-        } else {
-          this.revive();
-        }
+    if (this.isMouseOver() && this.isMouseOverHealthTrigger() && mouse_released) {
+      if (this.status == "alive") {
+        this.kill();
+      } else {
+        this.revive();
       }
     }
   }
@@ -440,8 +447,8 @@ class Client extends Node {
     ctx.restore();
   }
 
-  execute() {
-    super.execute();
+  executeIfAlive() {
+    super.executeIfAlive();
 
     if (this.counter % 40 == 3) {
       if(this.state == "idle"){
