@@ -312,6 +312,7 @@ class Node {
 
   revive(){
     this.status = "alive";
+    this.master = -1;
   }
 
   isMouseOver() {
@@ -339,18 +340,18 @@ class Node {
 class Replica extends Node {
   constructor(name, x, y) {
     super(name, x, y);
+
     this.color = replica_color;
+    this.type = "replica";
 
-    if(name == "r0")this.isMaster = true;
-    else this.isMaster = false;
-
+    this.master = -1;
     this.consensus_value = -1;
   }
 
   draw(ctx) {
     ctx.save();
 
-    if(this.isMaster)ctx.fillStyle = master_color;
+    if(this.name == this.master)ctx.fillStyle = master_color;
     else ctx.fillStyle = this.color;
 
     ctx.beginPath();
@@ -385,23 +386,37 @@ class Replica extends Node {
     ctx.restore();
   }
 
+  proposeLeadership() {
+    this.master = -1;
+    this.queue = this.queue.push(new Packet(this.name, "leader"));
+    this.links.forEach(link => {
+      if(link.dest.type == "replica")link.deliver(new Packet(this.name, "leader"))
+    });
+  }
+
   executeIfAlive() {
     super.executeIfAlive();
   
+    if(this.counter % 500 == 10)this.proposeLeadership();
+
     if(this.counter % 20 == 4){
       if(this.queue.size > 0){
         const data = this.queue.first().data;
         const type = this.queue.first().type;
 
-        if(this.isMaster){
-          if(type == "read"){
-            this.sendPacket("c0", this.consensus_value, "reply");
-          }else if(type == "write"){
-            this.consensus_value = data;
-            this.sendPacket("c0", "success", "reply");
-          }
+        if(type == "leader"){
+          if(this.master == -1 || data > this.master)this.master = data;
         }else{
-          this.sendPacket("c0", "r0", "redirect");
+          if(this.name == this.master){
+            if(type == "read"){
+              this.sendPacket("c0", this.consensus_value, "reply");
+            }else if(type == "write"){
+              this.consensus_value = data;
+              this.sendPacket("c0", "success", "reply");
+            }
+          }else{
+              this.sendPacket("c0", this.master, "redirect");
+          }
         }
         this.queue = this.queue.shift();
       }
@@ -425,9 +440,13 @@ class Replica extends Node {
 class Client extends Node {
   constructor(name, x, y) {
     super(name, x, y);
+    
     this.color = client_color;
+    this.type = "client";
+
     this.state = "idle";
     this.current_request = -1;
+    this.last_active = 0;
   }
 
   draw(ctx) {
@@ -460,6 +479,7 @@ class Client extends Node {
         }
         this.sendPacket2("r" + Math.floor(Math.random() * this.links.size), this.current_request);
         this.state = "waiting";
+        this.last_active = this.counter;
       }
     }
     if(this.counter % 20 == 10) {
@@ -471,10 +491,20 @@ class Client extends Node {
           this.current_request = -1;
           this.state = "idle";
         }else if(type == "redirect"){
-          this.sendPacket2(data, this.current_request);
+          if(data == -1){
+            this.sendPacket2("r" + Math.floor(Math.random() * this.links.size), this.current_request);
+          }else{
+            this.sendPacket2(data, this.current_request);
+          }
         }
 
         this.queue = this.queue.shift();
+        this.last_active = this.counter;
+      }
+    }else{
+      if(this.counter - this.last_active > 200){
+        this.sendPacket2("r" + Math.floor(Math.random() * this.links.size), this.current_request);
+        this.last_active = this.counter;
       }
     }
   }
