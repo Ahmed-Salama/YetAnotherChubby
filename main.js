@@ -28,6 +28,9 @@ const replica_color = "#F7DC6F";
 const master_color = "#EB984E";
 const client_color = "#C39BD3";
 
+const entity_refresh_timeout = 20;
+const entity_refresh_timeout_random = 200;
+
 //Function to get the mouse position
 const getMousePos = (canvas, event) => {
   var rect = canvas.getBoundingClientRect();
@@ -179,10 +182,9 @@ class Link {
     this.src = src;
     this.dest = dest;
     this.deliverables = Immutable.List();
-    this.speed = 0.04;
+    this.speed = 10 / Math.sqrt((src.x - dest.x) * (src.x - dest.x) + (src.y - dest.y) * (src.y - dest.y));
 
-    // set infinite loop for the link 
-    setInterval(this.execute.bind(this), 100);
+  setTimeout(this.execute.bind(this), entity_refresh_timeout + Math.random() * entity_refresh_timeout_random);
   }
 
   draw(ctx) {
@@ -207,14 +209,17 @@ class Link {
   }
 
   execute() {
-    this.deliverables.forEach(d => d.progress += this.speed);
+    var self = this;
+    this.deliverables.forEach(d => d.progress += self.speed);
     const done = this.deliverables.filter(d => d.progress >= 1);
     const still = this.deliverables.filter(d => d.progress < 1);
 
     this.deliverables = still;
     done.forEach(d => {
-      this.dest.receivePacket(d.packet);
+      self.dest.receivePacket(d.packet);
     });
+
+    setTimeout(this.execute.bind(this), entity_refresh_timeout + Math.random() * entity_refresh_timeout_random);
   }
 
   deliver(packet) {
@@ -237,7 +242,7 @@ class Node {
     this.status = "alive";
 
     // set infinite loop for the replica 
-    this.timerId = setInterval(this.execute.bind(this), 100);
+    setTimeout(this.execute.bind(this), entity_refresh_timeout + Math.random() * entity_refresh_timeout_random);
   }
 
   drawIfKilled(ctx) {
@@ -342,6 +347,8 @@ class Node {
     if (this.status == "alive") {
       this.executeIfAlive();
     }
+
+    setTimeout(this.execute.bind(this), entity_refresh_timeout + Math.random() * entity_refresh_timeout_random);
   }
 
   executeIfAlive() {
