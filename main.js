@@ -28,9 +28,6 @@ const replica_color = "#F7DC6F";
 const master_color = "#EB984E";
 const client_color = "#C39BD3";
 
-const entity_refresh_timeout = 20;
-const entity_refresh_timeout_random = 200;
-
 //Function to get the mouse position
 const getMousePos = (canvas, event) => {
   var rect = canvas.getBoundingClientRect();
@@ -158,7 +155,15 @@ class Packet {
   constructor(data, type) {
     this.data = data;
     this.type = type;
+    this.sender = -1;
   }  
+}
+
+class Proposal {
+  constructor(number, value) {
+    this.number = number;
+    this.value = value;
+  }
 }
 
 class Deliverable {
@@ -174,9 +179,10 @@ class Link {
     this.src = src;
     this.dest = dest;
     this.deliverables = Immutable.List();
-    this.speed = 10 / Math.sqrt((src.x - dest.x) * (src.x - dest.x) + (src.y - dest.y) * (src.y - dest.y));
+    this.speed = 0.04;
 
-  setTimeout(this.execute.bind(this), entity_refresh_timeout + Math.random() * entity_refresh_timeout_random);
+    // set infinite loop for the link 
+    setInterval(this.execute.bind(this), 100);
   }
 
   draw(ctx) {
@@ -201,17 +207,14 @@ class Link {
   }
 
   execute() {
-    var self = this;
-    this.deliverables.forEach(d => d.progress += self.speed);
+    this.deliverables.forEach(d => d.progress += this.speed);
     const done = this.deliverables.filter(d => d.progress >= 1);
     const still = this.deliverables.filter(d => d.progress < 1);
 
     this.deliverables = still;
     done.forEach(d => {
-      self.dest.receivePacket(d.packet);
+      this.dest.receivePacket(d.packet);
     });
-
-    setTimeout(this.execute.bind(this), entity_refresh_timeout + Math.random() * entity_refresh_timeout_random);
   }
 
   deliver(packet) {
@@ -234,7 +237,7 @@ class Node {
     this.status = "alive";
 
     // set infinite loop for the replica 
-    setTimeout(this.execute.bind(this), entity_refresh_timeout + Math.random() * entity_refresh_timeout_random);
+    this.timerId = setInterval(this.execute.bind(this), 100);
   }
 
   drawIfKilled(ctx) {
@@ -275,7 +278,10 @@ class Node {
 
     var queueIndex = 1;
     this.queue.forEach(p => {
-      drawMessageQueueEntry(queueIndex, "10px Arial", p.type + ": " + p.data);
+      if(p.type == "propose")drawMessageQueueEntry(queueIndex, "10px Arial", p.type + ": " + p.data.number);
+      else if(p.type == "apply")drawMessageQueueEntry(queueIndex, "10px Arial", p.type + ": " + p.data.type);
+      else drawMessageQueueEntry(queueIndex, "10px Arial", p.type + ": " + p.data);
+
       queueIndex++;
     });
   }
@@ -336,8 +342,6 @@ class Node {
     if (this.status == "alive") {
       this.executeIfAlive();
     }
-
-    setTimeout(this.execute.bind(this), entity_refresh_timeout + Math.random() * entity_refresh_timeout_random);
   }
 
   executeIfAlive() {
@@ -353,6 +357,16 @@ class Replica extends Node {
 
     this.master = -1;
     this.consensus_value = -1;
+  
+    this.proposal_number = 0;
+    this.proposal_value = -1;
+    this.promises_counter = 0;
+    this.accepted_counter = 0;
+
+    this.promise = -1;
+    this.accepted_value = -1;
+    
+    this.state = "idle";
   }
 
   draw(ctx) {
@@ -393,33 +407,89 @@ class Replica extends Node {
     ctx.restore();
   }
 
+  nextProposalNumber(){
+    this.proposal_number = (Math.floor(this.proposal_number / 10) + 1) * 10 + parseInt(this.name[1]);
+  }
+
+  sendToAll(packet){
+    this.links.forEach(link => {
+      if(link.dest.type == "replica")link.deliver(packet);
+    })
+  }
+  
   proposeLeadership() {
     this.master = -1;
-    this.queue = this.queue.push(new Packet(this.name, "leader"));
-    this.links.forEach(link => {
-      if(link.dest.type == "replica")link.deliver(new Packet(this.name, "leader"))
-    });
+    const packet = new Packet(this.name, "leader");
+
+    this.queue = this.queue.push(packet);
+    this.sendToAll(packet);
   }
 
   executeIfAlive() {
     super.executeIfAlive();
-  
-    if(this.counter % 500 == 10)this.proposeLeadership();
 
+    if(this.counter % 500 == 10){
+      this.proposeLeadership();
+    }
     if(this.counter % 20 == 4){
       if(this.queue.size > 0){
-        const data = this.queue.first().data;
-        const type = this.queue.first().type;
+        const packet = this.queue.first();
+        const data = packet.data;
+        const type = packet.type;
 
         if(type == "leader"){
-          if(this.master == -1 || data > this.master)this.master = data;
+          if(this.master == -1 || data > this.master)this.master = data; 
+        }else if(type == "prep"){
+          if(this.promise <= data){
+            this.sendPacket(packet.sender, this.accepted_value, "promise");
+          }else{
+
+          }
+        }else if(type == "promise"){
+          this.promises_counter++;
+          if(data != -1)this.proposal_value = data;
+
+          if(this.promises_counter > Math.floor(this.links.size / 2)){
+            var proposal_packet = new Packet(new Proposal(this.proposal_number, this.proposal_value), "propose");
+            proposal_packet.sender = this.name;
+
+            this.sendToAll(proposal_packet);
+            this.promises_counter = 0;
+          }
+        }else if(type == "propose"){
+          if(this.promise <= data.number){
+            this.sendPacket(packet.sender, -1, "accepted");
+          }else{
+
+          }
+        }else if(type == "accepted"){
+          this.accepted_counter++;
+          if(this.accepted_counter > Math.floor(this.links.size / 2)){
+            const apply_packet = new Packet(this.proposal_value, "apply");
+            
+            this.queue = this.queue.push(apply_packet);
+            this.sendToAll(apply_packet);
+            this.sendPacket("c0", "success", "reply");
+
+            this.accepted_counter = 0;
+          }
+        }else if(type == "apply"){
+          if(data.type == "write"){
+            this.consensus_value = data.data;
+          }
         }else{
           if(this.name == this.master){
             if(type == "read"){
               this.sendPacket("c0", this.consensus_value, "reply");
             }else if(type == "write"){
-              this.consensus_value = data;
-              this.sendPacket("c0", "success", "reply");
+              this.nextProposalNumber();
+              this.proposal_value = packet;
+
+              var proposal_packet = new Packet(this.proposal_number, "prep");
+              proposal_packet.sender = this.name;
+
+              this.promises_counter = 0;
+              this.sendToAll(proposal_packet);
             }
           }else{
               this.sendPacket("c0", this.master, "redirect");
@@ -509,7 +579,7 @@ class Client extends Node {
         this.last_active = this.counter;
       }
     }else{
-      if(this.counter - this.last_active > 200){
+      if(this.counter - this.last_active > 500){
         this.sendPacket2("r" + Math.floor(Math.random() * this.links.size), this.current_request);
         this.last_active = this.counter;
       }
