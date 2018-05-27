@@ -28,8 +28,8 @@ const replica_color = "#F7DC6F";
 const master_color = "#EB984E";
 const client_color = "#C39BD3";
 
-const entity_refresh_timeout = 20;
-const entity_refresh_timeout_random = 200;
+const entity_refresh_timeout = 80;
+const entity_refresh_timeout_random = 30;
 
 //Function to get the mouse position
 const getMousePos = (canvas, event) => {
