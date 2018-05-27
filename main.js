@@ -100,7 +100,15 @@ $(document).ready(function() {
     }))
     .toList();
 
-    console.log(links.size);
+    setInterval(() => {
+      var minority_size = Math.floor(replicaSize / 2);
+      var to_kill = Immutable.Range(0, minority_size).map(i => Math.floor(Math.random() * replicaSize)).toSet();
+
+      to_kill.forEach(node_id => replicas.get(node_id).kill());
+      setTimeout(() => {
+        to_kill.forEach(node_id => replicas.get(node_id).revive());
+      }, 9000)
+    }, 10000);
     
     // start draw loop
     setInterval(() => {
